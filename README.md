@@ -160,7 +160,7 @@ parserRegistry.register(myAdapter);
 
 Selesai — bahasa baru otomatis muncul di language selector dan parser badge.
 
-Lihat panduan lengkap di [`ADDING_LANGUAGES.md`](./ADDING_LANGUAGES.md).
+Lihat panduan lengkap di [`ADDING_LANGUAGES.md`](./docs/ADDING_LANGUAGES.md).
 
 ---
 
@@ -174,7 +174,7 @@ Lihat panduan lengkap di [`ADDING_LANGUAGES.md`](./ADDING_LANGUAGES.md).
 
 ```bash
 # Clone repo
-git clone https://github.com/ngecode/ngecode-converter.git
+git clone https://github.com/aufall02/ngecode-converter
 cd ngecode-converter
 
 # Install dependencies

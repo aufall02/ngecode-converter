@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount, tick } from "svelte";
-    import { goto } from "$app/navigation";
+    import { goto, replaceState } from "$app/navigation";
+    import { page } from "$app/stores";
     import MonacoEditor from "$lib/Components/MonacoEditor.svelte";
     import ExportPanel from "$lib/Components/ExportPanel.svelte";
     import ResizablePanel from "$lib/Components/ResizablePanel.svelte";
@@ -49,6 +50,7 @@
     let diagramType = $state("flowchart");
     let flowDirection = $state<FlowDirection>("TD");
     let snippetTitle = $state("Untitled Snippet");
+    let saveError = $state<string | null>(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mermaid: any = null;
     let ast = $state<unknown>(null);
@@ -167,6 +169,71 @@
     // Debounce timer
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+    // ── URL state helpers ─────────────────────────────────────────────────────
+
+    /** Encode state ke URL search params */
+    function encodeToUrl(
+        c: string,
+        lang: string,
+        title: string,
+        dt: string,
+    ): string {
+        const params = new URLSearchParams();
+        params.set("c", btoa(unescape(encodeURIComponent(c))));
+        params.set("l", lang);
+        params.set("t", title);
+        params.set("dt", dt);
+        return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    }
+
+    /** Decode state dari URL search params, return null jika tidak ada */
+    function decodeFromUrl(): {
+        code: string;
+        language: string;
+        title: string;
+        diagramType: string;
+    } | null {
+        const params = new URLSearchParams(window.location.search);
+        const c = params.get("c");
+        const l = params.get("l");
+        const t = params.get("t");
+        const dt = params.get("dt");
+        if (!c) return null;
+        try {
+            return {
+                code: decodeURIComponent(escape(atob(c))),
+                language: l ?? "javascript",
+                title: t ?? "Shared Snippet",
+                diagramType: dt ?? "flowchart",
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    // ── localStorage multi-snippet helpers ────────────────────────────────────
+
+    interface SavedSnippet {
+        id: string;
+        title: string;
+        code: string;
+        language: string;
+        diagramType: string;
+        savedAt: string;
+    }
+
+    function loadAllSnippets(): SavedSnippet[] {
+        try {
+            return JSON.parse(localStorage.getItem("ngecode_snippets") ?? "[]");
+        } catch {
+            return [];
+        }
+    }
+
+    function persistSnippets(snippets: SavedSnippet[]) {
+        localStorage.setItem("ngecode_snippets", JSON.stringify(snippets));
+    }
+
     // Initialize Mermaid with light theme (dynamic import — browser only)
     onMount(async () => {
         const { default: mermaidLib } = await import("mermaid");
@@ -183,6 +250,15 @@
             },
             securityLevel: "loose",
         });
+
+        // ── Load dari URL jika ada params ─────────────────────────────────────
+        const fromUrl = decodeFromUrl();
+        if (fromUrl) {
+            code = fromUrl.code;
+            language = fromUrl.language;
+            snippetTitle = fromUrl.title;
+            diagramType = fromUrl.diagramType;
+        }
 
         // Initial parse
         handleCodeChange(code);
@@ -323,72 +399,86 @@
         generateDiagram();
     }
 
-    // New snippet
+    // New snippet — reset ke sample code & bersihkan URL params
     function newSnippet() {
         const adapter = parserRegistry.getByLanguage(language);
         code = adapter?.getSampleCode(language) ?? "";
         snippetTitle = "Untitled Snippet";
         showSnippetMenu = false;
+        // Bersihkan URL params
+        if (window.location.search) {
+            replaceState(window.location.pathname, {});
+        }
         parseAndRender();
     }
 
-    // Save snippet (local only – no server in this SvelteKit setup)
+    // Save snippet ke localStorage (multi-snippet, per ID unik)
     async function saveSnippet() {
         isSaving = true;
+        saveError = null;
         try {
-            const data = {
-                title: snippetTitle,
-                code,
-                language,
-                diagram_type: diagramType,
-                saved_at: new Date().toISOString(),
-            };
-            localStorage.setItem("ngecode_snippet", JSON.stringify(data));
+            const snippets = loadAllSnippets();
+            // Cek apakah sudah ada snippet dengan title yang sama → update
+            const existing = snippets.find((s) => s.title === snippetTitle);
+            const now = new Date().toISOString();
+            if (existing) {
+                existing.code = code;
+                existing.language = language;
+                existing.diagramType = diagramType;
+                existing.savedAt = now;
+            } else {
+                snippets.push({
+                    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                    title: snippetTitle,
+                    code,
+                    language,
+                    diagramType,
+                    savedAt: now,
+                });
+            }
+            persistSnippets(snippets);
+
+            // Update URL juga supaya link saat ini mencerminkan state tersimpan
+            const url = encodeToUrl(code, language, snippetTitle, diagramType);
+            replaceState(url, {});
+
             saveSuccess = true;
-            setTimeout(() => {
-                saveSuccess = false;
-            }, 2000);
+            setTimeout(() => (saveSuccess = false), 2500);
         } catch (err) {
             console.error("Save error:", err);
+            saveError = "Gagal menyimpan snippet";
         } finally {
             isSaving = false;
             showSnippetMenu = false;
         }
     }
 
-    // Fork snippet (reload from saved)
-    async function forkSnippet() {
-        try {
-            const raw = localStorage.getItem("ngecode_snippet");
-            if (raw) {
-                const data = JSON.parse(raw);
-                snippetTitle = `Fork of ${data.title}`;
-                code = data.code;
-                language = data.language;
-                diagramType = data.diagram_type;
-                parseAndRender();
-            }
-        } catch (err) {
-            console.error("Fork error:", err);
-        }
+    // Fork — buat salinan dengan title baru dari snippet yang sedang aktif
+    // (bukan dari localStorage, tapi dari state yang sedang ditampilkan)
+    function forkSnippet() {
+        snippetTitle = `Fork of ${snippetTitle}`;
         showSnippetMenu = false;
+        // Bersihkan URL supaya tidak dianggap snippet yang sama
+        if (window.location.search) {
+            replaceState(window.location.pathname, {});
+        }
     }
 
-    // Share snippet
+    // Share — encode state ke URL dan tampilkan modal
     function openShareModal() {
-        shareUrl = window.location.href;
+        shareUrl = encodeToUrl(code, language, snippetTitle, diagramType);
         showShareModal = true;
         showSnippetMenu = false;
     }
 
-    // Copy share URL
+    // Copy share URL ke clipboard
     async function copyShareUrl() {
         try {
             await navigator.clipboard.writeText(shareUrl);
             copiedShare = true;
-            setTimeout(() => {
-                copiedShare = false;
-            }, 2000);
+            // Update URL bar juga supaya user bisa langsung copy dari address bar
+            replaceState(shareUrl, {});
+            setTimeout(() => (copiedShare = false), 2500);
         } catch (err) {
             console.error("Copy failed:", err);
         }
@@ -486,37 +576,130 @@
                         onclick={() => (showSnippetMenu = false)}
                     ></div>
                     <div
-                        class="absolute top-full left-0 mt-1 w-48 bg-white border border-[#93a1a1]/30 rounded shadow-lg z-50"
+                        class="absolute top-full left-0 mt-1 w-64 bg-white border border-[#93a1a1]/30 rounded shadow-lg z-50 overflow-hidden"
                     >
-                        <button
-                            onclick={newSnippet}
-                            class="w-full flex items-center gap-2 px-4 py-2 text-sm text-left hover:bg-[#EEE8D5] transition-colors"
-                        >
-                            <FilePlus size={14} />
-                            <span>New</span>
-                        </button>
-                        <button
-                            onclick={saveSnippet}
-                            disabled={isSaving}
-                            class="w-full flex items-center gap-2 px-4 py-2 text-sm text-left hover:bg-[#EEE8D5] transition-colors disabled:opacity-50"
-                        >
-                            <Save size={14} />
-                            <span>{isSaving ? "Saving..." : "Save"}</span>
-                        </button>
-                        <button
-                            onclick={forkSnippet}
-                            class="w-full flex items-center gap-2 px-4 py-2 text-sm text-left hover:bg-[#EEE8D5] transition-colors"
-                        >
-                            <GitFork size={14} />
-                            <span>Fork</span>
-                        </button>
-                        <button
-                            onclick={openShareModal}
-                            class="w-full flex items-center gap-2 px-4 py-2 text-sm text-left hover:bg-[#EEE8D5] transition-colors"
-                        >
-                            <Share2 size={14} />
-                            <span>Share...</span>
-                        </button>
+                        <!-- Actions -->
+                        <div class="p-1">
+                            <button
+                                onclick={newSnippet}
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[#EEE8D5] rounded transition-colors"
+                            >
+                                <FilePlus size={14} class="text-[#268bd2]" />
+                                <span>New Snippet</span>
+                            </button>
+                            <button
+                                onclick={saveSnippet}
+                                disabled={isSaving}
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[#EEE8D5] rounded transition-colors disabled:opacity-50"
+                            >
+                                <Save size={14} class="text-[#859900]" />
+                                <span>{isSaving ? "Saving..." : "Save"}</span>
+                                {#if window.location.search}
+                                    <span
+                                        class="ml-auto text-[10px] text-[#268bd2] bg-[#268bd2]/10 px-1.5 rounded"
+                                        >shared</span
+                                    >
+                                {/if}
+                            </button>
+                            <button
+                                onclick={forkSnippet}
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[#EEE8D5] rounded transition-colors"
+                            >
+                                <GitFork size={14} class="text-[#6c71c4]" />
+                                <span>Fork Current</span>
+                            </button>
+                            <button
+                                onclick={openShareModal}
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[#EEE8D5] rounded transition-colors"
+                            >
+                                <Share2 size={14} class="text-[#2aa198]" />
+                                <span>Share...</span>
+                            </button>
+                        </div>
+
+                        {#if saveError}
+                            <div
+                                class="px-3 py-1.5 text-xs text-[#dc322f] bg-[#dc322f]/5 border-t border-[#93a1a1]/15"
+                            >
+                                ⚠ {saveError}
+                            </div>
+                        {/if}
+
+                        <!-- Saved snippets list -->
+                        {#if loadAllSnippets().length > 0}
+                            {@const saved = loadAllSnippets()}
+                            <div class="border-t border-[#93a1a1]/15">
+                                <p
+                                    class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#93a1a1]"
+                                >
+                                    Saved ({saved.length})
+                                </p>
+                                <div class="max-h-48 overflow-y-auto">
+                                    {#each saved.slice().reverse() as s (s.id)}
+                                        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                                        <div
+                                            onclick={() => {
+                                                code = s.code;
+                                                language = s.language;
+                                                snippetTitle = s.title;
+                                                diagramType = s.diagramType;
+                                                showSnippetMenu = false;
+                                                if (window.location.search)
+                                                    replaceState(
+                                                        window.location
+                                                            .pathname,
+                                                        {},
+                                                    );
+                                                parseAndRender();
+                                            }}
+                                            class="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-[#EEE8D5] transition-colors cursor-pointer group"
+                                        >
+                                            <div class="flex-1 min-w-0">
+                                                <p
+                                                    class="text-xs font-medium text-[#657b83] truncate"
+                                                >
+                                                    {s.title}
+                                                </p>
+                                                <p
+                                                    class="text-[10px] text-[#93a1a1]"
+                                                >
+                                                    {s.language} · {new Date(
+                                                        s.savedAt,
+                                                    ).toLocaleDateString(
+                                                        "id-ID",
+                                                        {
+                                                            day: "numeric",
+                                                            month: "short",
+                                                        },
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onclick={(e) => {
+                                                    e.stopPropagation();
+                                                    const all =
+                                                        loadAllSnippets().filter(
+                                                            (x) =>
+                                                                x.id !== s.id,
+                                                        );
+                                                    persistSnippets(all);
+                                                    showSnippetMenu = false;
+                                                    setTimeout(
+                                                        () =>
+                                                            (showSnippetMenu = true),
+                                                        10,
+                                                    );
+                                                }}
+                                                class="opacity-0 group-hover:opacity-100 text-[#dc322f]/60 hover:text-[#dc322f] transition-all p-0.5 rounded"
+                                                title="Hapus"
+                                            >
+                                                <X size={11} />
+                                            </button>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        {/if}
                     </div>
                 {/if}
             </div>
@@ -1200,25 +1383,66 @@
             </h3>
 
             <div class="space-y-4">
-                <div>
-                    <label class="block text-sm text-[#93a1a1] mb-1"
-                        >Share URL</label
+                <!-- Info: title + language -->
+                <div
+                    class="flex items-center gap-2 text-xs text-[#93a1a1] bg-[#EEE8D5]/60 rounded px-3 py-2"
+                >
+                    <span
+                        class="font-medium text-[#657b83] truncate max-w-[180px]"
+                        >{snippetTitle}</span
                     >
+                    <span class="text-[#93a1a1]/50">·</span>
+                    <span>{language}</span>
+                    <span class="text-[#93a1a1]/50">·</span>
+                    <span>{code.split("\n").length} baris</span>
+                    <span
+                        class="ml-auto font-mono text-[10px] {shareUrl.length >
+                        8000
+                            ? 'text-[#dc322f]'
+                            : 'text-[#859900]'}"
+                    >
+                        {shareUrl.length} chars
+                    </span>
+                </div>
+
+                {#if shareUrl.length > 8000}
+                    <div
+                        class="flex items-start gap-2 text-xs text-[#b58900] bg-[#b58900]/8 border border-[#b58900]/20 rounded px-3 py-2"
+                    >
+                        <span class="mt-0.5">⚠</span>
+                        <span
+                            >URL cukup panjang karena kode besar. Beberapa
+                            browser/platform mungkin memotongnya. Pertimbangkan
+                            untuk menyimpan dan share sebagai file.</span
+                        >
+                    </div>
+                {/if}
+
+                <div>
+                    <label
+                        class="block text-xs font-medium text-[#93a1a1] mb-1.5 uppercase tracking-wider"
+                    >
+                        Share URL
+                    </label>
                     <div class="flex gap-2">
                         <input
                             type="text"
                             readonly
                             value={shareUrl}
-                            class="flex-1 px-3 py-2 bg-[#EEE8D5] rounded text-sm"
+                            onclick={(e) =>
+                                (e.target as HTMLInputElement).select()}
+                            class="flex-1 px-3 py-2 bg-[#EEE8D5] rounded text-xs font-mono text-[#657b83] focus:outline-none cursor-text"
                         />
                         <button
                             onclick={copyShareUrl}
-                            class="px-3 py-2 bg-[#268bd2] text-white rounded hover:bg-[#268bd2]/80 transition-colors flex items-center gap-1"
+                            class="px-3 py-2 bg-[#268bd2] text-white rounded hover:bg-[#268bd2]/80 transition-colors flex items-center gap-1.5 text-sm whitespace-nowrap"
                         >
                             {#if copiedShare}
                                 <Check size={14} />
+                                <span class="text-xs">Copied!</span>
                             {:else}
                                 <Copy size={14} />
+                                <span class="text-xs">Copy</span>
                             {/if}
                         </button>
                     </div>
@@ -1229,7 +1453,7 @@
                         href="https://twitter.com/intent/tweet?url={encodeURIComponent(
                             shareUrl,
                         )}&text={encodeURIComponent(
-                            `Check out my code snippet: ${snippetTitle}`,
+                            `Lihat snippet kode saya: ${snippetTitle} — dibuat di NgeCode Explorer`,
                         )}"
                         target="_blank"
                         rel="noopener noreferrer"
@@ -1242,6 +1466,7 @@
                         target="_blank"
                         rel="noopener noreferrer"
                         class="px-3 py-2 bg-[#EEE8D5] rounded hover:bg-[#93a1a1]/20 transition-colors flex items-center gap-1 text-sm"
+                        title="Buka di tab baru"
                     >
                         <ExternalLink size={14} />
                         Open
