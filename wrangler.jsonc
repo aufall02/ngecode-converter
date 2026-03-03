@@ -1,0 +1,9 @@
+{
+  // Cloudflare Pages — NgeCode Converter
+  // Docs: https://developers.cloudflare.com/pages/
+
+  "name": "ngecode-converter",
+
+  "compatibility_date": "2025-03-03",
+  "compatibility_flags": ["nodejs_als"],
+}
