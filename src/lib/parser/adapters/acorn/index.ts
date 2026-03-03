@@ -42,17 +42,27 @@ const LANGUAGES: ILanguage[] = [
 // TS-only secara line-by-line supaya acorn tetap bisa build AST yang berguna.
 
 function stripTypeScriptSyntax(code: string): string {
-  // ── Pass 1: hapus block-level TS constructs ─────────────────────────────────
+  // ── Pass 1: hapus block-level TS constructs (multiline safe) ────────────────
   let result = code;
 
-  // interface declarations
-  result = result.replace(/^[ \t]*interface\s+\w+[^{]*\{[^}]*\}/gm, "");
-  // type aliases: type Foo = ...;
-  result = result.replace(/^[ \t]*type\s+\w[\w\s]*=\s*[^;]+;/gm, "");
+  // interface declarations (possibly multiline)
+  result = result.replace(
+    /^[ \t]*(?:export\s+)?interface\s+\w[\w\s,<>]*\{[^}]*\}/gm,
+    "",
+  );
+  // type aliases: type Foo = ...;  (possibly multiline with |)
+  result = result.replace(
+    /^[ \t]*(?:export\s+)?type\s+\w+[\w\s,<>]*=[\s\S]*?;/gm,
+    "",
+  );
   // declare statements
   result = result.replace(/^[ \t]*declare\s+.+$/gm, "");
   // decorators @Foo / @Foo(...)
   result = result.replace(/^[ \t]*@\w+(\([^)]*\))?[ \t]*\n/gm, "");
+  // abstract method declarations (no body): `abstract foo(): void;`
+  result = result.replace(/^[ \t]*abstract\s+\w+[^{}\n]*;\s*$/gm, "");
+  // `implements Foo, Bar` clause on class declaration
+  result = result.replace(/\bimplements\s+[\w\s,.<>]+(?=\s*\{)/g, "");
 
   // ── Pass 2: line-by-line inline TS syntax ───────────────────────────────────
   const lines = result.split("\n");
@@ -62,32 +72,49 @@ function stripTypeScriptSyntax(code: string): string {
     let l = line;
     const trimmed = l.trimStart();
 
+    // Skip blank lines produced by pass 1
+    // (keep them so line numbers stay meaningful)
+
     // Jangan sentuh case/default — mereka punya `:` yang harus tetap ada
     const isSwitchCase =
       /^case\s+/.test(trimmed) || /^default\s*:/.test(trimmed);
 
     if (!isSwitchCase) {
-      // Hapus access modifiers
-      l = l.replace(
-        /\b(public|private|protected|readonly|abstract|override)\s+/g,
-        "",
-      );
+      // Hapus `abstract` keyword on class declaration: `abstract class Foo`
+      l = l.replace(/\babstract\s+(?=class\b)/g, "");
 
-      // Hapus generic type params: <Type>, <T extends X>
-      // Hanya yang diawali huruf kapital (TS types, bukan JSX atau comparison)
-      l = l.replace(/<[A-Z][^<>()=]*>/g, "");
+      // Hapus access + modifier keywords
+      l = l.replace(/\b(public|private|protected|readonly|override)\s+/g, "");
 
-      // Hapus `as Type` assertion
-      l = l.replace(/\bas\s+[\w<>\[\]|&.,\s]+/g, "");
+      // Hapus generic type params: <Type>, <T extends X>, <K, V>
+      // Hanya yang diawali huruf kapital atau sudah pasti generik
+      l = l.replace(/<[A-Z][^<>()=\n]*>/g, "");
 
-      // 1) Function return type: ): ReturnType { atau ): ReturnType;
+      // Hapus `as Type` assertion (tidak boleh hapus `as` di import/export)
+      l = l.replace(/\bas\s+[\w<>\[\]|&.,\s?]+/g, "");
+
+      // 1) Function/method return type: ): ReturnType { atau ): ReturnType;
       l = l.replace(/\)\s*:\s*[\w<>\[\]|&.,\s?]+(?=\s*[\{;])/g, ")");
 
-      // 2) Variable/param annotation diikuti =, ,, ), ;
+      // 2) Parameter type annotation: `name: string,`  `age: number)`  `x: T =`
+      l = l.replace(
+        /(\w)\s*\?\s*:\s*[\w][\w<>\[\]|&.,\s?]*(?=\s*[=,);])/g,
+        "$1",
+      );
       l = l.replace(/(\w)\s*:\s*[\w][\w<>\[\]|&.,\s?|]*(?=\s*[=,);])/g, "$1");
 
-      // 3) Class field / trailing annotation dengan uppercase type
-      l = l.replace(/(\w)\s*:\s*[A-Z][\w<>\[\]|&.,\s?]*\s*;/g, "$1;");
+      // 3) Class field declaration with type only (no `=`), e.g. `name: string;`
+      //    These lines have nothing useful for JS — blank them out
+      if (
+        /^[ \t]*\w+\s*[?!]?\s*:\s*[\w<>\[\]|&.,\s?]+\s*;?\s*$/.test(l) &&
+        !/^\s*(case|default|return|throw|const|let|var|if|for|while)\b/.test(
+          l,
+        ) &&
+        !/[=({]/.test(l)
+      ) {
+        out.push("");
+        continue;
+      }
 
       // 4) Non-null assertion !. ![ !(
       l = l.replace(/!(?=[.[(])/g, "");
