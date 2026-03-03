@@ -19,7 +19,7 @@ export type {
 
 // ── Adapters (re-exported for advanced use / testing) ─────────────────────────
 export { acornAdapter } from "./adapters/acorn/index";
-export { pythonLezerAdapter } from "./adapters/python-lezer/index";
+// export { pythonLezerAdapter } from "./adapters/python-lezer/index";
 
 // ── Auto-registration ─────────────────────────────────────────────────────────
 // Cukup import "$lib/parser" dan semua adapter langsung tersedia di registry.
@@ -27,7 +27,7 @@ export { pythonLezerAdapter } from "./adapters/python-lezer/index";
 
 import { parserRegistry } from "./core/registry";
 import { acornAdapter } from "./adapters/acorn/index";
-import { pythonLezerAdapter } from "./adapters/python-lezer/index";
+// import { pythonLezerAdapter } from "./adapters/python-lezer/index";
 
 parserRegistry.register(acornAdapter);
-parserRegistry.register(pythonLezerAdapter);
+// parserRegistry.register(pythonLezerAdapter); // coming soon
