@@ -1,13 +1,16 @@
 {
-  // Cloudflare Pages — NgeCode Converter
-  // Docs: https://developers.cloudflare.com/pages/
+  // Cloudflare Workers — NgeCode Converter
+  // Docs: https://developers.cloudflare.com/workers/static-assets/
 
   "name": "ngecode-converter",
+
+  "main": ".svelte-kit/cloudflare/_worker.js",
 
   "compatibility_date": "2025-03-03",
   "compatibility_flags": ["nodejs_compat"],
 
   "assets": {
+    "binding": "ASSETS",
     "directory": ".svelte-kit/cloudflare",
   },
 }
