@@ -32,7 +32,7 @@
         Copy,
         Check,
         ExternalLink,
-        User,
+        Github,
     } from "lucide-svelte";
 
     // ── Derive languages & diagram types from registry ────────────────────────
@@ -764,12 +764,13 @@
             {/if}
 
             <a
-                href="https://github.com"
+                href="https://github.com/aufall02/ngecode-converter"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="flex items-center gap-2 text-sm hover:text-[#268bd2] transition-colors"
+                title="View on GitHub"
             >
-                <User size={14} />
+                <Github size={14} />
                 <span>NgeCode</span>
             </a>
         </div>
