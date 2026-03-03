@@ -5,5 +5,5 @@
   "name": "ngecode-converter",
 
   "compatibility_date": "2025-03-03",
-  "compatibility_flags": ["nodejs_als"],
+  "compatibility_flags": ["nodejs_compat"],
 }
