@@ -44,6 +44,7 @@ Terinspirasi dari [AST Explorer](https://astexplorer.net), tapi fokus pada **dia
 | **Snippet management** | 🔜 Perlu database | Save/load snippet butuh backend DB — lihat bagian Roadmap |
 
 ### 🔜 Roadmap
+- [ ] fitur onboarding
 - [ ] Python (aktifkan `@lezer/python`)
 - [ ] Java, Go, Rust via adapter baru
 - [ ] Sequence diagram dari function calls
@@ -52,6 +53,7 @@ Terinspirasi dari [AST Explorer](https://astexplorer.net), tapi fokus pada **dia
 - [ ] Collaborative editing
 - [ ] **Snippet backend** — database untuk simpan & share snippet (kandidat: PlanetScale / Turso / Cloudflare D1)
 - [ ] User auth untuk snippet private/public
+- [ ] Runtime Flow Visualization
 
 ---
 
@@ -257,37 +259,6 @@ Pull request, issue, dan feedback sangat disambut! 🙌
 Pastikan `npm run check` tidak menghasilkan error baru sebelum PR.
 
 ---
-
-## Lisensi
-
-Proyek ini dirilis di bawah **GNU General Public License v3.0 (GPL-3.0)**.
-
-```
-NgeCode Converter — Visualisasi kode sebagai flowchart interaktif
-Copyright (C) 2025  NgeCode
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-```
-
-Artinya:
-- ✅ **Bebas digunakan** untuk keperluan apapun
-- ✅ **Bebas dimodifikasi** dan didistribusikan ulang
-- ✅ **Bebas diambil** sebagai basis project baru
-- ⚠️ **Wajib open-source** — jika kamu distribusikan versi modifikasi, source code-nya harus ikut dibuka dengan lisensi GPL-3.0 yang sama
-
----
-
 <p align="center">
   Built with ❤️ by <a href="https://ngecode.id">NgeCode</a> · Code. Teach. Share. Repeat.
 </p>
