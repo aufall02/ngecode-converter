@@ -5,6 +5,8 @@
     import {
         AST_EXPLORER_THEME_NAME,
         AST_EXPLORER_THEME,
+        AST_EXPLORER_DARK_THEME_NAME,
+        AST_EXPLORER_DARK_THEME,
     } from "../themes/astExplorerTheme";
 
     interface EditorAPI {
@@ -22,22 +24,23 @@
         language?: string;
         theme?: string;
         height?: string;
+        fontSize?: number;
         onChange?: (value: string) => void;
         onCursorChange?: (line: number, col: number) => void;
         onReady?: (api: EditorAPI) => void;
         readOnly?: boolean;
     }
 
-    let {
-        value = "",
-        language = "javascript",
-        theme = AST_EXPLORER_THEME_NAME,
-        height = "100%",
-        onChange,
-        onCursorChange,
-        onReady,
-        readOnly = false,
-    }: Props = $props();
+    const props: Props = $props();
+    // Akses individual prop via props.xxx agar reaktif di $effect
+
+    // Shorthand helper — dipakai di template
+    const value = $derived(props.value ?? "");
+    const language = $derived(props.language ?? "javascript");
+    const theme = $derived(props.theme ?? AST_EXPLORER_THEME_NAME);
+    const height = $derived(props.height ?? "100%");
+    const fontSize = $derived(props.fontSize ?? 13);
+    const readOnly = $derived(props.readOnly ?? false);
 
     let container: HTMLDivElement;
     let editor: Monaco.editor.IStandaloneCodeEditor | null = null;
@@ -53,23 +56,27 @@
 
             monacoRef = monacoInstance;
 
-            // Register custom theme once
+            // Register custom themes once
             if (!isThemeRegistered) {
                 monacoInstance.editor.defineTheme(
                     AST_EXPLORER_THEME_NAME,
                     AST_EXPLORER_THEME,
                 );
+                monacoInstance.editor.defineTheme(
+                    AST_EXPLORER_DARK_THEME_NAME,
+                    AST_EXPLORER_DARK_THEME,
+                );
                 isThemeRegistered = true;
             }
 
             editor = monacoInstance.editor.create(container, {
-                value,
-                language,
-                theme,
-                readOnly,
+                value: props.value ?? "",
+                language: props.language ?? "javascript",
+                theme: props.theme ?? AST_EXPLORER_THEME_NAME,
+                readOnly: props.readOnly ?? false,
                 automaticLayout: true,
                 minimap: { enabled: false },
-                fontSize: 13,
+                fontSize: props.fontSize ?? 13,
                 fontFamily:
                     "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
                 fontLigatures: true,
@@ -122,19 +129,19 @@
             const createdEditor = editor!;
             createdEditor.onDidChangeModelContent(() => {
                 const newValue = createdEditor.getValue();
-                onChange?.(newValue);
+                props.onChange?.(newValue);
             });
 
             // Emit cursor position changes
             createdEditor.onDidChangeCursorPosition((e) => {
-                onCursorChange?.(
+                props.onCursorChange?.(
                     e.position.lineNumber,
                     e.position.column - 1, // convert to 0-based column
                 );
             });
 
             // Expose public API via onReady callback (Svelte 5 compatible)
-            onReady?.({
+            props.onReady?.({
                 highlightRange(
                     startLine: number,
                     startCol: number,
@@ -225,6 +232,14 @@
     $effect(() => {
         if (editor) {
             editor.updateOptions({ readOnly });
+        }
+    });
+
+    // Reactively update fontSize
+    $effect(() => {
+        const size = fontSize; // baca derived agar effect ter-track
+        if (editor) {
+            editor.updateOptions({ fontSize: size });
         }
     });
 </script>
