@@ -36,7 +36,12 @@ Terinspirasi dari [AST Explorer](https://astexplorer.net), tapi fokus pada **dia
 | **Export** | Download SVG / PNG / Mermaid source |
 | **Single diagram mode** | 1 function → full height tanpa chrome |
 | **Parser badge** | Tampilkan library parser + versi yang digunakan |
-| **Snippet management** | New, save, fork, share snippet via URL |
+
+
+### ⏳ Coming Soon (butuh setup dulu)
+| Fitur | Status | Catatan |
+|---|---|---|
+| **Snippet management** | 🔜 Perlu database | Save/load snippet butuh backend DB — lihat bagian Roadmap |
 
 ### 🔜 Roadmap
 - [ ] Python (aktifkan `@lezer/python`)
@@ -45,6 +50,8 @@ Terinspirasi dari [AST Explorer](https://astexplorer.net), tapi fokus pada **dia
 - [ ] Class structure diagram
 - [ ] Dark mode
 - [ ] Collaborative editing
+- [ ] **Snippet backend** — database untuk simpan & share snippet (kandidat: PlanetScale / Turso / Cloudflare D1)
+- [ ] User auth untuk snippet private/public
 
 ---
 
@@ -223,17 +230,17 @@ Tombol **TD** (top-down) dan **LR** (left-right) di pojok kanan panel diagram.
 - **Gerakkan cursor di editor** → node diagram yang bersangkutan dapat glow biru
 
 ### Export
-Klik tombol **Export** di header, pilih format:
+Klik tombol **Export** di panel diagram (sebelah kiri tombol TD/LR), pilih format:
 - **SVG** — vektor, bisa di-scale bebas
 - **PNG** — raster, siap pakai di dokumen
 - **Mermaid** — source diagram, bisa di-paste ke Notion, GitHub, dll
 
-### Share / Fork
-Menu **Snippet** (ikon hamburger) di header:
-- **New** — reset ke sample code
-- **Save** — simpan ke local storage
-- **Fork** — buat copy dari snippet orang lain
-- **Share** — generate URL yang bisa dibagikan
+### Snippet Management ⚠️ Coming Soon
+Fitur snippet (save, fork, share) sementara **disembunyikan** karena membutuhkan setup database backend terlebih dahulu.
+
+> **Rencana ke depan:** snippet akan disimpan di database (kandidat: Cloudflare D1 / Turso / PlanetScale) sehingga bisa benar-benar di-share ke publik via link pendek, bukan hanya URL panjang berbasis encoding.
+
+Untuk saat ini, kode tidak tersimpan antar sesi — refresh halaman akan reset ke sample code.
 
 ---
 
