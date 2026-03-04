@@ -91,7 +91,11 @@ function sanitizeId(name: string): string {
 }
 
 function sanitizeLabel(name: string): string {
-  return name.replace(/"/g, "'").replace(/[<>]/g, "");
+  return name
+    .replace(/"/g, "'")
+    .replace(/[<>]/g, "")
+    .replace(/\[/g, "&#91;")
+    .replace(/\]/g, "&#93;");
 }
 
 function toAN(node: unknown): AcornNode {
@@ -810,11 +814,63 @@ function generateFlowchart(
     },
   });
 
+  // ── Collect top-level non-function statements ────────────────────────────
+  // Statement di luar fungsi/class (const arr = [...], for loop, forEach, dsb)
+  // akan ditampilkan sebagai block "(script)" tersendiri — baik saat tidak ada
+  // fungsi maupun saat ada fungsi sekaligus.
+  const programNode = toAN(ast);
+  const allTopLevel = Array.isArray(programNode.body)
+    ? (programNode.body as unknown[])
+    : [];
+
+  // Filter: hanya statement yang BUKAN pure function/class declaration
+  const topLevelScriptStmts = allTopLevel.filter((raw) => {
+    const s = toAN(raw);
+    if (s.type === "FunctionDeclaration") return false;
+    if (s.type === "ClassDeclaration") return false;
+    if (s.type === "VariableDeclaration") {
+      // Skip kalau SEMUA declarator adalah arrow/function expression
+      const decls = (s.declarations as unknown[]) ?? [];
+      const allAreFuncs = decls.every((d) => {
+        const node = toAN(d as unknown);
+        const init = node.init ? toAN(node.init as unknown) : null;
+        return (
+          init?.type === "ArrowFunctionExpression" ||
+          init?.type === "FunctionExpression"
+        );
+      });
+      return !allAreFuncs;
+    }
+    return true;
+  });
+
   if (funcs.length === 0) {
+    if (topLevelScriptStmts.length === 0) {
+      return {
+        success: false,
+        diagram: "",
+        error: "No statements found to generate a flowchart.",
+      };
+    }
+
+    const block: string[] = [`flowchart ${flowDirection}`];
+    block.push(`  %% fn: (script)`);
+
+    const startNode = emitNode("▶ (script)", "round");
+    block.push(`  ${startNode.def}`);
+
+    const exits = walkStatements(topLevelScriptStmts, block, [startNode.id]);
+
+    if (exits.length > 0) {
+      const endNode = emitNode("End ◀", "round");
+      block.push(`  ${endNode.def}`);
+      addEdges(exits, endNode.id, block);
+    }
+
     return {
-      success: false,
-      diagram: "",
-      error: "No functions found to generate a flowchart.",
+      success: true,
+      diagram: block.join("\n"),
+      nodePositions: { ..._nodePositions },
     };
   }
 
@@ -822,6 +878,28 @@ function generateFlowchart(
   // separated by a "%%SPLIT%%" divider so the UI can split and
   // render them one-by-one stacked vertically.
   const diagrams: string[] = [];
+
+  // Jika ada top-level script statements di luar fungsi (misal const arr = [...]
+  // atau expression statement), tampilkan sebagai block "(script)" paling atas.
+  if (topLevelScriptStmts.length > 0) {
+    const scriptBlock: string[] = [`flowchart ${flowDirection}`];
+    scriptBlock.push(`  %% fn: (script)`);
+
+    const scriptStart = emitNode("▶ (script)", "round");
+    scriptBlock.push(`  ${scriptStart.def}`);
+
+    const scriptExits = walkStatements(topLevelScriptStmts, scriptBlock, [
+      scriptStart.id,
+    ]);
+
+    if (scriptExits.length > 0) {
+      const scriptEnd = emitNode("End ◀", "round");
+      scriptBlock.push(`  ${scriptEnd.def}`);
+      addEdges(scriptExits, scriptEnd.id, scriptBlock);
+    }
+
+    diagrams.push(scriptBlock.join("\n"));
+  }
 
   for (const fn of funcs) {
     const asyncTag = fn.isAsync ? " ⚡" : "";
