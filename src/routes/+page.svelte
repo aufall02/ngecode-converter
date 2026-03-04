@@ -106,6 +106,8 @@
     // ── Highlight state ───────────────────────────────────────────────────────
     /** Ref function yang selalu baca allNodePositions terbaru — hindari stale closure */
     function handleCursorChange(line: number, col: number) {
+        // Diagram node baru diklik → suppress selama 500ms agar highlight tidak langsung reset
+        if (Date.now() < suppressCursorUntil) return;
         const entries = Object.entries(allNodePositions);
 
         if (entries.length === 0) {
@@ -149,7 +151,11 @@
             ec: number,
         ) => void;
         clearHighlight: () => void;
+        formatCode: () => Promise<void>;
     } | null = $state(null);
+    let isFormattingCode = $state(false);
+    // Timestamp terakhir diagram node diklik — suppress cursor handler selama 500ms
+    let suppressCursorUntil = 0;
     /** Node ID yang sedang di-highlight di diagram (dari hover editor) */
     let highlightedNodeId = $state<string | null>(null);
     /** Semua positions dari semua diagram yang ter-render saat ini */
@@ -258,6 +264,18 @@
 
     // Initialize Mermaid with light theme (dynamic import — browser only)
     onMount(async () => {
+        // Global click listener — clear highlight kalau klik di luar g.node diagram
+        function handleGlobalClick(e: MouseEvent) {
+            const target = e.target as Element | null;
+            if (!target) return;
+            // Kalau klik tepat di atas node diagram, biarkan onDiagramNodeClick yang handle
+            if (target.closest("g.node")) return;
+            // Klik di luar node → clear semua highlight
+            monacoEditorApi?.clearHighlight();
+            highlightedNodeId = null;
+        }
+        document.addEventListener("click", handleGlobalClick);
+
         const { default: mermaidLib } = await import("mermaid");
         mermaid = mermaidLib;
 
@@ -287,6 +305,10 @@
 
         // Initial parse
         handleCodeChange(code);
+
+        return () => {
+            document.removeEventListener("click", handleGlobalClick);
+        };
     });
 
     // Handle code changes with debounce
@@ -576,6 +598,8 @@
     function onDiagramNodeClick(nodeId: string) {
         const loc = allNodePositions[nodeId];
         if (!loc || !monacoEditorApi) return;
+        // Suppress cursor change selama 500ms agar highlight tidak langsung reset
+        suppressCursorUntil = Date.now() + 500;
         monacoEditorApi.highlightRange(
             loc.startLine,
             loc.startCol,
@@ -911,6 +935,37 @@
                         <!-- Spacer -->
                         <div class="flex-1"></div>
 
+                        <!-- Format button -->
+                        <button
+                            onclick={async () => {
+                                if (!monacoEditorApi) return;
+                                isFormattingCode = true;
+                                await monacoEditorApi.formatCode();
+                                isFormattingCode = false;
+                            }}
+                            disabled={isFormattingCode}
+                            class="flex items-center gap-1 px-2 h-6 rounded text-[10px] font-medium transition-colors disabled:opacity-40
+                                {editorTheme === AST_EXPLORER_DARK_THEME_NAME
+                                ? 'text-[#9cdcfe] hover:bg-white/10 border border-white/10'
+                                : 'text-[#657b83] hover:bg-[#93a1a1]/20 border border-[#93a1a1]/30'}"
+                            title="Format kode dengan Prettier (Shift+Alt+F)"
+                        >
+                            {#if isFormattingCode}
+                                <svg class="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                                </svg>
+                            {:else}
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <line x1="3" y1="6" x2="21" y2="6"/>
+                                    <line x1="3" y1="12" x2="15" y2="12"/>
+                                    <line x1="3" y1="18" x2="18" y2="18"/>
+                                </svg>
+                            {/if}
+                            <span>Format</span>
+                        </button>
+
+                        <div class="w-px h-3.5 {editorTheme === AST_EXPLORER_DARK_THEME_NAME ? 'bg-white/10' : 'bg-[#93a1a1]/30'}"></div>
+
                         <!-- Font size / Zoom controls -->
                         <div class="flex items-center gap-0.5">
                             <button
@@ -965,6 +1020,7 @@
                             fontSize={editorFontSize}
                             onChange={handleCodeChange}
                             onCursorChange={handleCursorChange}
+                            onFormat={(formatted) => (code = formatted)}
                             height="100%"
                         />
                     </div>
