@@ -6,7 +6,10 @@
     import ExportPanel from "$lib/Components/ExportPanel.svelte";
     import ResizablePanel from "$lib/Components/ResizablePanel.svelte";
     import PanZoomDiagram from "$lib/Components/PanZoomDiagram.svelte";
-    import { AST_EXPLORER_THEME_NAME } from "$lib/themes/astExplorerTheme";
+    import {
+        AST_EXPLORER_THEME_NAME,
+        AST_EXPLORER_DARK_THEME_NAME,
+    } from "$lib/themes/astExplorerTheme";
     import {
         parserRegistry,
         type ILanguage,
@@ -33,6 +36,10 @@
         Check,
         ExternalLink,
         Github,
+        ZoomIn,
+        ZoomOut,
+        Sun,
+        Moon,
     } from "lucide-svelte";
 
     // ── Derive languages & diagram types from registry ────────────────────────
@@ -51,6 +58,11 @@
     let flowDirection = $state<FlowDirection>("TD");
     let snippetTitle = $state("Untitled Snippet");
     let saveError = $state<string | null>(null);
+    // ── Editor appearance ─────────────────────────────────────────────────────
+    let editorTheme = $state(AST_EXPLORER_THEME_NAME);
+    let editorFontSize = $state(13);
+    const FONT_SIZE_MIN = 10;
+    const FONT_SIZE_MAX = 24;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mermaid: any = null;
     let ast = $state<unknown>(null);
@@ -61,6 +73,16 @@
     } | null>(null);
     let mermaidCode = $state("");
     let mermaidSvg = $state("");
+    // mermaidSvgsExport: render ulang dengan htmlLabels:false — teks jadi SVG <text> murni
+    // sehingga file SVG/PNG yang diexport punya teks yang readable tanpa butuh external font
+    let mermaidSvgsExport = $state<
+        {
+            title: string;
+            svg: string;
+            group: string | null;
+            collapsed: boolean;
+        }[]
+    >([]);
     let mermaidSvgs = $state<
         {
             title: string;
@@ -251,6 +273,9 @@
             securityLevel: "loose",
         });
 
+        // Pre-configure instance export (htmlLabels: false) — dipakai hanya untuk export
+        // Kita simpan config ini dan re-init sebentar saat export
+
         // ── Load dari URL jika ada params ─────────────────────────────────────
         const fromUrl = decodeFromUrl();
         if (fromUrl) {
@@ -328,10 +353,65 @@
                     .filter(Boolean);
 
                 const rendered: typeof mermaidSvgs = [];
+                const renderedExport: typeof mermaidSvgsExport = [];
                 // Gabungkan semua nodePositions dari result
                 const mergedPositions: typeof allNodePositions = {
                     ...(result.nodePositions ?? {}),
                 };
+
+                // Re-init mermaid dengan htmlLabels:false khusus render export
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: "default",
+                    flowchart: {
+                        useMaxWidth: false,
+                        htmlLabels: false,
+                        curve: "basis",
+                        padding: 15,
+                    },
+                    securityLevel: "loose",
+                });
+
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    const titleMatch = part.match(/%%\s*fn:\s*(.+)/);
+                    const classMatch = part.match(/%%\s*class:\s*(.+)/);
+                    const title = titleMatch
+                        ? titleMatch[1].trim()
+                        : parts.length === 1
+                          ? activeDiagramType.name
+                          : `Function ${i + 1}`;
+                    const group = classMatch ? classMatch[1].trim() : null;
+                    try {
+                        // Render untuk export dulu (htmlLabels:false)
+                        const exportUid = `mermaid-export-${Date.now()}-${i}`;
+                        const { svg: exportSvg } = await mermaid.render(
+                            exportUid,
+                            part,
+                        );
+                        renderedExport.push({
+                            title,
+                            svg: exportSvg,
+                            group,
+                            collapsed: false,
+                        });
+                    } catch (e) {
+                        console.warn(`Skipping export diagram ${i}:`, e);
+                    }
+                }
+
+                // Restore htmlLabels:true untuk render tampilan di UI
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: "default",
+                    flowchart: {
+                        useMaxWidth: true,
+                        htmlLabels: true,
+                        curve: "basis",
+                        padding: 15,
+                    },
+                    securityLevel: "loose",
+                });
 
                 for (let i = 0; i < parts.length; i++) {
                     const part = parts[i];
@@ -357,11 +437,15 @@
                         console.warn(`Skipping diagram ${i}:`, e);
                     }
                 }
+
                 // Always use mermaidSvgs — unifies single and multi rendering
                 allNodePositions = mergedPositions;
                 highlightedNodeId = null;
                 mermaidSvgs = rendered;
-                mermaidSvg = rendered.map((r) => r.svg).join("");
+                mermaidSvgsExport = renderedExport;
+                // mermaidSvg = SVG pertama saja (untuk backward compat).
+                // Export multi-diagram ditangani ExportPanel via mermaidSvgs.
+                mermaidSvg = rendered[0]?.svg ?? "";
             } else {
                 mermaidCode = "";
                 mermaidSvg = "";
@@ -558,8 +642,8 @@
 
             <div class="h-5 w-px bg-[#93a1a1]/30"></div>
 
-            <!-- Snippet Menu -->
-            <div class="relative">
+            <!-- Snippet Menu — hidden until DB backend ready -->
+            <div class="relative hidden">
                 <button
                     onclick={() => (showSnippetMenu = !showSnippetMenu)}
                     class="flex items-center gap-2 px-3 py-1.5 bg-white border border-[#93a1a1]/30 rounded hover:bg-[#FDF6E3] transition-colors"
@@ -776,9 +860,9 @@
         </div>
     </header>
 
-    <!-- Snippet Title Bar -->
+    <!-- Snippet Title Bar — hidden until DB backend ready -->
     <div
-        class="flex items-center justify-between gap-4 px-4 py-1.5 bg-[#EEE8D5]/50 border-b border-[#93a1a1]/20 z-20 relative"
+        class="hidden items-center justify-between gap-4 px-4 py-1.5 bg-[#EEE8D5]/50 border-b border-[#93a1a1]/20 z-20 relative"
     >
         <div class="flex items-center gap-2 flex-1">
             <input
@@ -788,56 +872,6 @@
                 placeholder="Snippet title..."
             />
         </div>
-
-        <!-- Export Dropdown -->
-        {#if mermaidSvg || mermaidCode}
-            <div class="relative">
-                <button
-                    onclick={() => (showExportMenu = !showExportMenu)}
-                    class="flex items-center gap-2 px-3 py-1 bg-white border border-[#93a1a1]/30 text-[#657b83] rounded hover:bg-[#FDF6E3] hover:text-[#268bd2] transition-colors text-sm font-medium shadow-sm"
-                    aria-label="Export Diagram"
-                    title="Export Diagram"
-                >
-                    <Download size={14} />
-                    <span>Export</span>
-                </button>
-
-                {#if showExportMenu}
-                    <div
-                        class="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-[#93a1a1]/20 overflow-hidden z-50"
-                    >
-                        <div
-                            class="flex justify-between items-center p-3 border-b border-[#93a1a1]/10 bg-[#EEE8D5]/30"
-                        >
-                            <span
-                                class="text-xs font-semibold uppercase tracking-wider text-[#93a1a1]"
-                                >Export Options</span
-                            >
-                            <button
-                                onclick={() => (showExportMenu = false)}
-                                class="text-[#93a1a1] hover:text-red-500 transition-colors"
-                            >
-                                <X size={14} />
-                            </button>
-                        </div>
-                        <ExportPanel
-                            {mermaidSvg}
-                            {mermaidCode}
-                            filename={exportFilename}
-                            theme="light"
-                        />
-                    </div>
-
-                    <!-- Backdrop -->
-                    <button
-                        class="fixed inset-0 w-full h-full z-40 cursor-default"
-                        onclick={() => (showExportMenu = false)}
-                        aria-label="Close export menu"
-                        title="Close export menu"
-                    ></button>
-                {/if}
-            </div>
-        {/if}
     </div>
 
     <!-- Main Content - 2 Panel Layout -->
@@ -850,16 +884,75 @@
         >
             {#snippet first()}
                 <!-- Left Panel: Code Editor -->
-                <div class="h-full flex flex-col bg-[#FDF6E3]">
+                <div
+                    class="h-full flex flex-col {editorTheme ===
+                    AST_EXPLORER_DARK_THEME_NAME
+                        ? 'bg-[#1e1e2e]'
+                        : 'bg-[#FDF6E3]'}"
+                >
                     <div
-                        class="flex items-center gap-2 px-3 py-1.5 bg-[#EEE8D5]/50 border-b border-[#93a1a1]/20"
+                        class="flex items-center gap-2 px-3 py-1.5 border-b {editorTheme ===
+                        AST_EXPLORER_DARK_THEME_NAME
+                            ? 'bg-[#252540]/80 border-[#ffffff]/10'
+                            : 'bg-[#EEE8D5]/50 border-[#93a1a1]/20'}"
                     >
                         <Code2 size={14} class="text-[#268bd2]" />
-                        <span class="text-xs font-medium">Source Code</span>
+                        <span
+                            class="text-xs font-medium {editorTheme ===
+                            AST_EXPLORER_DARK_THEME_NAME
+                                ? 'text-[#d4d4d4]'
+                                : ''}">Source Code</span
+                        >
                         <span class="text-xs text-[#93a1a1]"
                             >({allLanguages.find((l) => l.id === language)
                                 ?.ext})</span
                         >
+
+                        <!-- Spacer -->
+                        <div class="flex-1"></div>
+
+                        <!-- Font size / Zoom controls -->
+                        <div class="flex items-center gap-0.5">
+                            <button
+                                onclick={() =>
+                                    (editorFontSize = Math.max(
+                                        FONT_SIZE_MIN,
+                                        editorFontSize - 1,
+                                    ))}
+                                disabled={editorFontSize <= FONT_SIZE_MIN}
+                                class="w-6 h-6 flex items-center justify-center rounded transition-colors disabled:opacity-30
+                                    {editorTheme ===
+                                AST_EXPLORER_DARK_THEME_NAME
+                                    ? 'text-[#9cdcfe] hover:bg-white/10'
+                                    : 'text-[#657b83] hover:bg-[#93a1a1]/20'}"
+                                title="Zoom out (kurangi font)"
+                            >
+                                <ZoomOut size={13} />
+                            </button>
+                            <span
+                                class="text-[10px] w-7 text-center tabular-nums {editorTheme ===
+                                AST_EXPLORER_DARK_THEME_NAME
+                                    ? 'text-[#6a737d]'
+                                    : 'text-[#93a1a1]'}"
+                                >{editorFontSize}px</span
+                            >
+                            <button
+                                onclick={() =>
+                                    (editorFontSize = Math.min(
+                                        FONT_SIZE_MAX,
+                                        editorFontSize + 1,
+                                    ))}
+                                disabled={editorFontSize >= FONT_SIZE_MAX}
+                                class="w-6 h-6 flex items-center justify-center rounded transition-colors disabled:opacity-30
+                                    {editorTheme ===
+                                AST_EXPLORER_DARK_THEME_NAME
+                                    ? 'text-[#9cdcfe] hover:bg-white/10'
+                                    : 'text-[#657b83] hover:bg-[#93a1a1]/20'}"
+                                title="Zoom in (perbesar font)"
+                            >
+                                <ZoomIn size={13} />
+                            </button>
+                        </div>
                     </div>
                     <div class="flex-1 overflow-hidden">
                         <MonacoEditor
@@ -868,7 +961,8 @@
                             language={allLanguages.find(
                                 (l) => l.id === language,
                             )?.monacoId ?? language}
-                            theme={AST_EXPLORER_THEME_NAME}
+                            theme={editorTheme}
+                            fontSize={editorFontSize}
                             onChange={handleCodeChange}
                             onCursorChange={handleCursorChange}
                             height="100%"
@@ -896,6 +990,63 @@
                                     class="animate-spin text-[#93a1a1]"
                                 />
                             {/if}
+
+                            <!-- Export Dropdown — dipindah dari title bar ke sini -->
+                            {#if mermaidSvg || mermaidCode}
+                                <div class="relative">
+                                    <button
+                                        onclick={() =>
+                                            (showExportMenu = !showExportMenu)}
+                                        class="flex items-center gap-1.5 px-2 py-1 bg-white border border-[#93a1a1]/30 text-[#657b83] rounded hover:bg-[#FDF6E3] hover:text-[#268bd2] transition-colors text-[11px] font-medium shadow-sm"
+                                        aria-label="Export Diagram"
+                                        title="Export Diagram"
+                                    >
+                                        <Download size={12} />
+                                        <span>Export</span>
+                                    </button>
+
+                                    {#if showExportMenu}
+                                        <div
+                                            class="absolute top-full right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-[#93a1a1]/20 overflow-hidden z-50"
+                                        >
+                                            <div
+                                                class="flex justify-between items-center p-3 border-b border-[#93a1a1]/10 bg-[#EEE8D5]/30"
+                                            >
+                                                <span
+                                                    class="text-xs font-semibold uppercase tracking-wider text-[#93a1a1]"
+                                                    >Export Options</span
+                                                >
+                                                <button
+                                                    onclick={() =>
+                                                        (showExportMenu = false)}
+                                                    class="text-[#93a1a1] hover:text-red-500 transition-colors"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                            <ExportPanel
+                                                {mermaidSvg}
+                                                mermaidSvgs={mermaidSvgsExport}
+                                                {mermaidCode}
+                                                filename={exportFilename}
+                                                theme="light"
+                                            />
+                                        </div>
+
+                                        <!-- Backdrop -->
+                                        <button
+                                            class="fixed inset-0 w-full h-full z-40 cursor-default"
+                                            onclick={() =>
+                                                (showExportMenu = false)}
+                                            aria-label="Close export menu"
+                                            title="Close export menu"
+                                        ></button>
+                                    {/if}
+                                </div>
+                            {/if}
+
+                            <!-- Divider -->
+                            <div class="w-px h-3.5 bg-[#93a1a1]/30"></div>
 
                             <!-- Direction toggle -->
                             <div
