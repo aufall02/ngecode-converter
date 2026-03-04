@@ -2,6 +2,10 @@
     import { onMount, onDestroy } from "svelte";
     import loader from "@monaco-editor/loader";
     import type * as Monaco from "monaco-editor";
+    import * as prettier from "prettier";
+    import prettierPluginBabel from "prettier/plugins/babel";
+    import prettierPluginEstree from "prettier/plugins/estree";
+    import prettierPluginTypescript from "prettier/plugins/typescript";
     import {
         AST_EXPLORER_THEME_NAME,
         AST_EXPLORER_THEME,
@@ -17,6 +21,7 @@
             endCol: number,
         ) => void;
         clearHighlight: () => void;
+        formatCode: () => Promise<void>;
     }
 
     interface Props {
@@ -28,6 +33,7 @@
         onChange?: (value: string) => void;
         onCursorChange?: (line: number, col: number) => void;
         onReady?: (api: EditorAPI) => void;
+        onFormat?: (formatted: string) => void;
         readOnly?: boolean;
     }
 
@@ -47,6 +53,27 @@
     let monacoRef: typeof Monaco | null = null;
     let isThemeRegistered = false;
     let activeDecorations: string[] = [];
+    let isFormatting = $state(false);
+
+    async function runPrettier(code: string, lang: string): Promise<string> {
+        const parser =
+            lang === "typescript" || lang === "tsx"
+                ? "typescript"
+                : "babel";
+        const plugins =
+            parser === "typescript"
+                ? [prettierPluginTypescript, prettierPluginEstree]
+                : [prettierPluginBabel, prettierPluginEstree];
+        return await prettier.format(code, {
+            parser,
+            plugins,
+            semi: true,
+            singleQuote: false,
+            tabWidth: 2,
+            trailingComma: "es5",
+            printWidth: 80,
+        });
+    }
 
     onMount(() => {
         let disposed = false;
@@ -140,6 +167,31 @@
                 );
             });
 
+            // Format shortcut: Shift+Alt+F
+            createdEditor.addCommand(
+                monacoInstance.KeyMod.Shift |
+                    monacoInstance.KeyMod.Alt |
+                    monacoInstance.KeyCode.KeyF,
+                async () => {
+                    const code = createdEditor.getValue();
+                    try {
+                        isFormatting = true;
+                        const formatted = await runPrettier(
+                            code,
+                            props.language ?? "javascript",
+                        );
+                        const position = createdEditor.getPosition();
+                        createdEditor.setValue(formatted);
+                        if (position) createdEditor.setPosition(position);
+                        props.onFormat?.(formatted);
+                    } catch (e) {
+                        console.warn("Prettier format error:", e);
+                    } finally {
+                        isFormatting = false;
+                    }
+                },
+            );
+
             // Expose public API via onReady callback (Svelte 5 compatible)
             props.onReady?.({
                 highlightRange(
@@ -183,6 +235,24 @@
                         activeDecorations,
                         [],
                     );
+                },
+                async formatCode() {
+                    const code = createdEditor.getValue();
+                    try {
+                        isFormatting = true;
+                        const formatted = await runPrettier(
+                            code,
+                            props.language ?? "javascript",
+                        );
+                        const position = createdEditor.getPosition();
+                        createdEditor.setValue(formatted);
+                        if (position) createdEditor.setPosition(position);
+                        props.onFormat?.(formatted);
+                    } catch (e) {
+                        console.warn("Prettier format error:", e);
+                    } finally {
+                        isFormatting = false;
+                    }
                 },
             });
         });

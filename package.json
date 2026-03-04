@@ -21,6 +21,7 @@
     "@types/acorn": "^4.0.6",
     "@types/jszip": "^3.4.0",
     "@types/svg-pan-zoom": "^3.3.0",
+    "prettier": "^3.8.1",
     "svelte": "^5.51.0",
     "svelte-check": "^4.4.2",
     "tailwindcss": "^4.1.18",
