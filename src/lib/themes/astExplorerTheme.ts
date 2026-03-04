@@ -1,6 +1,7 @@
 import type * as Monaco from "monaco-editor";
 
 export const AST_EXPLORER_THEME_NAME = "ast-explorer-light";
+export const AST_EXPLORER_DARK_THEME_NAME = "ast-explorer-dark";
 
 export const AST_EXPLORER_THEME: Monaco.editor.IStandaloneThemeData = {
   base: "vs",
@@ -185,5 +186,161 @@ export const AST_EXPLORER_THEME: Monaco.editor.IStandaloneThemeData = {
     "editorBracketHighlight.foreground4": "#b58900",
     "editorBracketHighlight.foreground5": "#2aa198",
     "editorBracketHighlight.foreground6": "#cb4b16",
+  },
+};
+
+// ─── AST Explorer Dark Theme ──────────────────────────────────────────────────
+// Mirip tampilan astexplorer.net — dark background, syntax colorful
+export const AST_EXPLORER_DARK_THEME: Monaco.editor.IStandaloneThemeData = {
+  base: "vs-dark",
+  inherit: true,
+  rules: [
+    // Default text
+    { token: "", foreground: "d4d4d4", background: "1e1e2e" },
+
+    // Comments — abu-abu muted
+    { token: "comment", foreground: "6a737d", fontStyle: "italic" },
+    { token: "comment.line", foreground: "6a737d", fontStyle: "italic" },
+    { token: "comment.block", foreground: "6a737d", fontStyle: "italic" },
+
+    // Keywords — biru muda seperti AST Explorer
+    { token: "keyword", foreground: "569cd6", fontStyle: "bold" },
+    { token: "keyword.control", foreground: "c586c0" },
+    { token: "keyword.operator", foreground: "d4d4d4" },
+    { token: "keyword.other", foreground: "569cd6" },
+
+    // Storage (var, let, const, function, class)
+    { token: "storage", foreground: "569cd6" },
+    { token: "storage.type", foreground: "569cd6" },
+    { token: "storage.modifier", foreground: "569cd6" },
+
+    // Strings — oranye/kuning seperti AST Explorer
+    { token: "string", foreground: "ce9178" },
+    { token: "string.quoted", foreground: "ce9178" },
+    { token: "string.template", foreground: "ce9178" },
+    { token: "string.regexp", foreground: "d16969" },
+
+    // Numbers — hijau muda
+    { token: "number", foreground: "b5cea8" },
+    { token: "number.float", foreground: "b5cea8" },
+    { token: "number.hex", foreground: "b5cea8" },
+
+    // Booleans / null
+    { token: "constant.language", foreground: "569cd6", fontStyle: "bold" },
+    { token: "constant.numeric", foreground: "b5cea8" },
+
+    // Variables
+    { token: "variable", foreground: "9cdcfe" },
+    { token: "variable.language", foreground: "569cd6" },
+    { token: "variable.other", foreground: "9cdcfe" },
+    { token: "variable.parameter", foreground: "9cdcfe" },
+
+    // Functions — kuning
+    { token: "entity.name.function", foreground: "dcdcaa", fontStyle: "bold" },
+    { token: "support.function", foreground: "dcdcaa" },
+
+    // Types / Classes — hijau
+    { token: "entity.name.type", foreground: "4ec9b0" },
+    { token: "entity.name.class", foreground: "4ec9b0" },
+    { token: "entity.other.inherited-class", foreground: "4ec9b0" },
+    { token: "support.class", foreground: "4ec9b0" },
+    { token: "support.type", foreground: "4ec9b0" },
+
+    // Properties
+    { token: "variable.object.property", foreground: "9cdcfe" },
+    { token: "meta.object-literal.key", foreground: "9cdcfe" },
+
+    // Operators & Punctuation
+    { token: "keyword.operator.arithmetic", foreground: "d4d4d4" },
+    { token: "keyword.operator.comparison", foreground: "d4d4d4" },
+    { token: "keyword.operator.logical", foreground: "d4d4d4" },
+    { token: "punctuation", foreground: "d4d4d4" },
+    { token: "delimiter", foreground: "d4d4d4" },
+    { token: "delimiter.bracket", foreground: "ffd700" },
+    { token: "delimiter.parenthesis", foreground: "da70d6" },
+
+    // TypeScript
+    { token: "type", foreground: "4ec9b0" },
+    { token: "type.identifier", foreground: "4ec9b0" },
+
+    // Decorators
+    { token: "meta.decorator", foreground: "c586c0" },
+
+    // Imports
+    { token: "keyword.control.import", foreground: "c586c0" },
+    { token: "keyword.control.from", foreground: "c586c0" },
+    { token: "keyword.control.export", foreground: "c586c0" },
+  ],
+  colors: {
+    // Background — dark seperti AST Explorer
+    "editor.background": "#1e1e2e",
+    "editor.foreground": "#d4d4d4",
+
+    // Line numbers
+    "editorLineNumber.foreground": "#4a4a6a",
+    "editorLineNumber.activeForeground": "#9cdcfe",
+
+    // Cursor
+    "editorCursor.foreground": "#aeafad",
+
+    // Selection
+    "editor.selectionBackground": "#264f78",
+    "editor.selectionHighlightBackground": "#264f7840",
+    "editor.inactiveSelectionBackground": "#264f7860",
+
+    // Word highlight
+    "editor.wordHighlightBackground": "#575757b8",
+    "editor.wordHighlightStrongBackground": "#004972b8",
+
+    // Find match
+    "editor.findMatchBackground": "#515c6a",
+    "editor.findMatchHighlightBackground": "#ea5c0044",
+
+    // Gutter
+    "editorGutter.background": "#1e1e2e",
+    "editorBracketMatch.background": "#0064001a",
+    "editorBracketMatch.border": "#888888",
+
+    // Line highlight
+    "editor.lineHighlightBackground": "#ffffff0d",
+    "editor.lineHighlightBorder": "#ffffff0d",
+
+    // Scrollbar
+    "scrollbar.shadow": "#000000",
+    "scrollbarSlider.background": "#79797966",
+    "scrollbarSlider.hoverBackground": "#646464b3",
+    "scrollbarSlider.activeBackground": "#bfbfbf66",
+
+    // Indent guides
+    "editorIndentGuide.background1": "#404040",
+    "editorIndentGuide.activeBackground1": "#707070",
+
+    // Widget
+    "editorWidget.background": "#252526",
+    "editorWidget.border": "#454545",
+    "editorHoverWidget.background": "#252526",
+    "editorHoverWidget.border": "#454545",
+
+    // Suggest widget
+    "editorSuggestWidget.background": "#252526",
+    "editorSuggestWidget.border": "#454545",
+    "editorSuggestWidget.selectedBackground": "#094771",
+    "editorSuggestWidget.highlightForeground": "#0097fb",
+
+    // Minimap
+    "minimap.background": "#1e1e2e",
+
+    // Error / Warning
+    "editorError.foreground": "#f48771",
+    "editorWarning.foreground": "#cca700",
+    "editorInfo.foreground": "#75beff",
+
+    // Bracket highlight
+    "editorBracketHighlight.foreground1": "#ffd700",
+    "editorBracketHighlight.foreground2": "#da70d6",
+    "editorBracketHighlight.foreground3": "#179fff",
+    "editorBracketHighlight.foreground4": "#ffd700",
+    "editorBracketHighlight.foreground5": "#da70d6",
+    "editorBracketHighlight.foreground6": "#179fff",
   },
 };
