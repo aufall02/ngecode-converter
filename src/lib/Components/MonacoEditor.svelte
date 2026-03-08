@@ -271,28 +271,37 @@
 
     // Reactively update language when prop changes
     $effect(() => {
-        if (editor && monacoRef && language) {
+        // Read reactive values BEFORE the `if (editor)` guard so Svelte 5
+        // tracks them as dependencies even while editor is still null (async init).
+        const lang = language;
+        const monaco = monacoRef;
+        if (editor && monaco && lang) {
             const model = editor.getModel();
             if (model) {
-                monacoRef.editor.setModelLanguage(model, language);
+                monaco.editor.setModelLanguage(model, lang);
             }
         }
     });
 
     // Reactively update theme when prop changes
     $effect(() => {
-        if (editor && monacoRef && theme) {
-            monacoRef.editor.setTheme(theme);
+        const t = theme;
+        const monaco = monacoRef;
+        if (editor && monaco && t) {
+            monaco.editor.setTheme(t);
         }
     });
 
     // Reactively update value only when it differs (avoid cursor-jump loops)
     $effect(() => {
+        // Always read `value` here so the effect is re-run whenever value
+        // changes — even if editor was null on the first run.
+        const v = value;
         if (editor) {
             const current = editor.getValue();
-            if (current !== value) {
+            if (current !== v) {
                 const position = editor.getPosition();
-                editor.setValue(value);
+                editor.setValue(v);
                 if (position) editor.setPosition(position);
             }
         }
@@ -300,8 +309,9 @@
 
     // Reactively update readOnly
     $effect(() => {
+        const ro = readOnly;
         if (editor) {
-            editor.updateOptions({ readOnly });
+            editor.updateOptions({ readOnly: ro });
         }
     });
 
