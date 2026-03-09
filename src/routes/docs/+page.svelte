@@ -19,6 +19,21 @@
 
     const changelog: ChangelogEntry[] = [
         {
+            version: "0.5.0",
+            date: "2025",
+            changes: [
+                { type: "added", text: "Run mode — jalankan kode langsung di browser, eksekusi dianimasikan baris per baris di Monaco Editor" },
+                { type: "added", text: "Code instrumentor — injeksi __trace() otomatis berdasarkan nodePositions dari flowchart" },
+                { type: "added", text: "Web Worker sandbox — kode dieksekusi terisolasi, tidak membekukan UI" },
+                { type: "added", text: "Console output panel — capture console.log/warn/error selama eksekusi" },
+                { type: "added", text: "Step controls — Play, Pause, Step Forward, Step Back, Reset, Rerun" },
+                { type: "added", text: "Speed control — Slow / Normal / Fast" },
+                { type: "added", text: "Halaman /docs — dokumentasi konstruk yang didukung, limitasi, dan changelog" },
+                { type: "improved", text: "Monaco highlight upgrade — dari deltaDecorations (deprecated) ke createDecorationsCollection" },
+                { type: "improved", text: "Highlight baris aktif saat trace: full-line background + border kiri biru + gutter indicator" },
+            ],
+        },
+        {
             version: "0.4.0",
             date: "2025",
             changes: [
@@ -191,13 +206,13 @@
     ];
 
     const comingSoon = [
-        { text: "▶ Run mode — animasi eksekusi langsung di flowchart", hot: true },
-        { text: "Python support", hot: false },
+        { text: "Python support — flowchart dari kode Python", hot: true },
+        { text: "Breakpoint di Run mode — pause otomatis di baris tertentu", hot: true },
+        { text: "Variable inspector — lihat nilai variabel di tiap step", hot: true },
         { text: "Diagram tipe lain: Class Structure, Dependencies, Sequence", hot: false },
-        { text: "Step-through debugger — jalankan kode satu langkah per langkah", hot: true },
-        { text: "Console output panel di samping diagram", hot: false },
         { text: "Dark mode penuh", hot: false },
-        { text: "Keyboard shortcuts", hot: false },
+        { text: "Keyboard shortcuts (Space = play/pause, → = step forward, dll)", hot: false },
+        { text: "Embed / iframe — embed diagram ke halaman lain", hot: false },
     ];
 </script>
 
