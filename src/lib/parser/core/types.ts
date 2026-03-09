@@ -36,6 +36,12 @@ export interface ParseResult {
   /** Which adapter produced this result */
   adapterId: string;
   error: ParseError | null;
+  /**
+   * The source code that was actually parsed — for TypeScript this is the
+   * TS-stripped plain JavaScript. For JS it equals the original code.
+   * Used by Run mode to instrument & execute the same code the AST was built from.
+   */
+  executableCode?: string;
 }
 
 // ─── Diagram Result ───────────────────────────────────────────────────────────

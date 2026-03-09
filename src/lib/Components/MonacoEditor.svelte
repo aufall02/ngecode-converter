@@ -52,7 +52,9 @@
     let editor: Monaco.editor.IStandaloneCodeEditor | null = null;
     let monacoRef: typeof Monaco | null = null;
     let isThemeRegistered = false;
-    let activeDecorations: string[] = [];
+    let decorationCollection: ReturnType<
+        ReturnType<typeof import("monaco-editor")["editor"]["create"]>["createDecorationsCollection"]
+    > | null = null;
     let isFormatting = $state(false);
 
     async function runPrettier(code: string, lang: string): Promise<string> {
@@ -201,8 +203,9 @@
                     endCol: number,
                 ) {
                     if (!createdEditor || !monacoInstance) return;
-                    const newDecos = createdEditor.deltaDecorations(
-                        activeDecorations,
+                    // dispose previous collection before creating a new one
+                    decorationCollection?.clear();
+                    decorationCollection = createdEditor.createDecorationsCollection(
                         [
                             {
                                 range: new monacoInstance.Range(
@@ -212,8 +215,10 @@
                                     endCol + 1,
                                 ),
                                 options: {
+                                    // Full-line background so trace highlight is clearly visible
+                                    isWholeLine: true,
                                     className: "nc-highlight-range",
-                                    isWholeLine: false,
+                                    marginClassName: "nc-highlight-margin",
                                     overviewRuler: {
                                         color: "#268bd2",
                                         position:
@@ -224,17 +229,13 @@
                             },
                         ],
                     );
-                    activeDecorations = newDecos;
                     createdEditor.revealLineInCenterIfOutsideViewport(
                         startLine,
                     );
                 },
                 clearHighlight() {
-                    if (!createdEditor) return;
-                    activeDecorations = createdEditor.deltaDecorations(
-                        activeDecorations,
-                        [],
-                    );
+                    decorationCollection?.clear();
+                    decorationCollection = null;
                 },
                 async formatCode() {
                     const code = createdEditor.getValue();
@@ -342,8 +343,14 @@
 
     /* Bidirectional highlight — diagram node → editor range */
     .monaco-editor-container :global(.nc-highlight-range) {
-        background-color: rgba(38, 139, 210, 0.18);
-        border-bottom: 2px solid #268bd2;
-        border-radius: 2px;
+        background-color: rgba(38, 139, 210, 0.15);
+        border-left: 3px solid #268bd2;
+        border-radius: 0 2px 2px 0;
+    }
+
+    /* Margin gutter indicator — arrow/dot di sebelah kiri nomor baris */
+    .monaco-editor-container :global(.nc-highlight-margin) {
+        background-color: #268bd2;
+        width: 3px !important;
     }
 </style>

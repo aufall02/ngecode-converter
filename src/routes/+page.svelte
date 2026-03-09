@@ -6,6 +6,10 @@
     import ExportPanel from "$lib/Components/ExportPanel.svelte";
     import ResizablePanel from "$lib/Components/ResizablePanel.svelte";
     import PanZoomDiagram from "$lib/Components/PanZoomDiagram.svelte";
+    import RunControls from "$lib/Components/RunControls.svelte";
+    import { instrumentCode } from "$lib/trace/instrumentor";
+    import { runTrace } from "$lib/trace/runner";
+    import type { LogEntry } from "$lib/trace/runner";
     import {
         AST_EXPLORER_THEME_NAME,
         AST_EXPLORER_DARK_THEME_NAME,
@@ -40,6 +44,7 @@
         ZoomOut,
         Sun,
         Moon,
+        Play,
     } from "lucide-svelte";
 
     // ── Derive languages & diagram types from registry ────────────────────────
@@ -103,7 +108,136 @@
     let mermaidError = $state<string | null>(null);
     let isRendering = $state(false);
 
+    // ── Run mode state ────────────────────────────────────────────────────────
+    /** The stripped/executable code used for the last parse — needed by instrumentor */
+    let executableCode = $state<string>("");
+    /** Whether the worker is currently executing */
+    let isExecuting = $state(false);
+    /** Full ordered trace from the last execution */
+    let traceSteps = $state<string[]>([]);
+    /** Console logs captured during execution */
+    let traceLogs = $state<LogEntry[]>([]);
+    /** Error message from execution, if any */
+    let traceError = $state<string | null>(null);
+    /** Current step index (-1 = before start) */
+    let traceStep = $state(-1);
+    /** Whether the animation is playing */
+    let traceIsPlaying = $state(false);
+    /** Animation speed in ms per step */
+    let traceSpeedMs = $state(400);
+    /** Whether run controls panel is visible */
+    let showRunControls = $state(false);
+    /** Internal timer handle for auto-play */
+    let tracePlayTimer: ReturnType<typeof setTimeout> | null = null;
+
     // ── Highlight state ───────────────────────────────────────────────────────
+    // ── Run mode helpers ──────────────────────────────────────────────────────
+
+    function resetTrace() {
+        if (tracePlayTimer !== null) {
+            clearTimeout(tracePlayTimer);
+            tracePlayTimer = null;
+        }
+        traceIsPlaying = false;
+        traceStep = -1;
+        monacoEditorApi?.clearHighlight();
+    }
+
+    function applyTraceStep(step: number) {
+        traceStep = step;
+        const nodeId = traceSteps[step] ?? null;
+        if (!nodeId || !monacoEditorApi) return;
+        const loc = allNodePositions[nodeId];
+        if (!loc) return;
+        // Suppress cursor-change handler so highlighting doesn't get reset immediately
+        suppressCursorUntil = Date.now() + traceSpeedMs + 200;
+        monacoEditorApi.highlightRange(
+            loc.startLine,
+            loc.startCol,
+            loc.endLine,
+            loc.endCol,
+        );
+    }
+
+    function traceStepForward() {
+        if (traceStep < traceSteps.length - 1) {
+            applyTraceStep(traceStep + 1);
+        }
+    }
+
+    function traceStepBack() {
+        if (traceStep > 0) {
+            applyTraceStep(traceStep - 1);
+        } else {
+            resetTrace();
+            monacoEditorApi?.clearHighlight();
+        }
+    }
+
+    function tracePlay() {
+        if (traceStep >= traceSteps.length - 1) {
+            // Already at end — restart from beginning
+            traceStep = -1;
+            monacoEditorApi?.clearHighlight();
+        }
+        traceIsPlaying = true;
+        scheduleNextStep();
+    }
+
+    function tracePause() {
+        traceIsPlaying = false;
+        if (tracePlayTimer !== null) {
+            clearTimeout(tracePlayTimer);
+            tracePlayTimer = null;
+        }
+    }
+
+    function scheduleNextStep() {
+        if (!traceIsPlaying) return;
+        if (traceStep >= traceSteps.length - 1) {
+            traceIsPlaying = false;
+            return;
+        }
+        tracePlayTimer = setTimeout(() => {
+            tracePlayTimer = null;
+            if (!traceIsPlaying) return;
+            traceStepForward();
+            scheduleNextStep();
+        }, traceSpeedMs);
+    }
+
+    async function handleRunCode() {
+        // Guard: need nodePositions to instrument
+        if (Object.keys(allNodePositions).length === 0) return;
+        if (!executableCode) return;
+
+        // Reset previous run
+        resetTrace();
+        traceSteps = [];
+        traceLogs = [];
+        traceError = null;
+        showRunControls = true;
+        isExecuting = true;
+
+        try {
+            const { code: instrumented } = instrumentCode(
+                executableCode,
+                allNodePositions,
+            );
+            const result = await runTrace(instrumented, { timeoutMs: 5_000 });
+            traceSteps = result.traces;
+            traceLogs = result.logs;
+            traceError = result.error;
+        } finally {
+            isExecuting = false;
+        }
+
+        // Auto-play once execution completes
+        if (traceSteps.length > 0 && !traceError) {
+            tracePlay();
+        }
+    }
+
     /** Ref function yang selalu baca allNodePositions terbaru — hindari stale closure */
     function handleCursorChange(line: number, col: number) {
         // Diagram node baru diklik → suppress selama 500ms agar highlight tidak langsung reset
@@ -338,7 +472,14 @@
 
         if (result.success) {
             ast = result.ast;
+            executableCode = result.executableCode ?? code;
             parseError = null;
+            // Reset run state when code changes
+            resetTrace();
+            showRunControls = false;
+            traceSteps = [];
+            traceLogs = [];
+            traceError = null;
             await generateDiagram();
         } else {
             ast = null;
@@ -619,11 +760,6 @@
 
         if (!nodeId) return;
 
-        // Mermaid v11 renders nodes sebagai:
-        //   <g class="node ..." id="flowchart-{nodeId}-{globalCounter}">
-        // Kita match dengan startsWith supaya counter tidak masalah.
-        // Tapi ada edge case: nodeId "rect_1" bisa match "rect_10", "rect_11" dsb.
-        // Solusi: cari elemen yang id-nya persis "flowchart-{nodeId}-{digits}"
         const pattern = new RegExp(
             `^flowchart-${nodeId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-\\d+$`,
         );
@@ -633,6 +769,8 @@
             }
         });
     });
+
+
 </script>
 
 <svelte:head>
@@ -872,6 +1010,18 @@
             {/if}
 
             <a
+                href="/docs"
+                class="flex items-center gap-1.5 text-sm hover:text-[#268bd2] transition-colors"
+                title="Dokumentasi"
+            >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                    <path d="M12 17h.01"/>
+                </svg>
+                <span>Docs</span>
+            </a>
+            <a
                 href="https://github.com/aufall02/ngecode-converter"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -921,6 +1071,38 @@
                             : 'bg-[#EEE8D5]/50 border-[#93a1a1]/20'}"
                     >
                         <Code2 size={14} class="text-[#268bd2]" />
+                        <!-- Run / Stop button di header editor -->
+                        {#if !showRunControls}
+                            <button
+                                onclick={handleRunCode}
+                                disabled={isRendering || Object.keys(allNodePositions).length === 0}
+                                title="Jalankan kode dan animasikan eksekusi di editor"
+                                class="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ml-1
+                                       bg-[#268bd2]/10 text-[#268bd2] border border-[#268bd2]/20
+                                       hover:bg-[#268bd2]/20 disabled:opacity-40 disabled:cursor-not-allowed
+                                       transition-colors"
+                            >
+                                <Play size={10} />
+                                <span>Run</span>
+                            </button>
+                        {:else}
+                            <button
+                                onclick={() => {
+                                    showRunControls = false;
+                                    resetTrace();
+                                    traceSteps = [];
+                                    traceLogs = [];
+                                    traceError = null;
+                                }}
+                                title="Tutup Run mode"
+                                class="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ml-1
+                                       bg-[#dc322f]/8 text-[#dc322f] border border-[#dc322f]/15
+                                       hover:bg-[#dc322f]/15 transition-colors"
+                            >
+                                <X size={10} />
+                                <span>Stop</span>
+                            </button>
+                        {/if}
                         <span
                             class="text-xs font-medium {editorTheme ===
                             AST_EXPLORER_DARK_THEME_NAME
@@ -1024,6 +1206,31 @@
                             height="100%"
                         />
                     </div>
+                    <!-- Run controls — di bawah editor, di dalam left panel -->
+                    {#if showRunControls}
+                        <RunControls
+                            totalSteps={traceSteps.length}
+                            currentStep={traceStep}
+                            isPlaying={traceIsPlaying}
+                            isExecuting={isExecuting}
+                            execError={traceError}
+                            logs={traceLogs}
+                            speedMs={traceSpeedMs}
+                            onPlay={tracePlay}
+                            onPause={tracePause}
+                            onStepBack={traceStepBack}
+                            onStepForward={traceStepForward}
+                            onReset={resetTrace}
+                            onRerun={handleRunCode}
+                            onSpeedChange={(ms) => {
+                                traceSpeedMs = ms;
+                                if (traceIsPlaying) {
+                                    tracePause();
+                                    tracePlay();
+                                }
+                            }}
+                        />
+                    {/if}
                 </div>
             {/snippet}
 
@@ -1701,6 +1908,8 @@
     :global(.pan-zoom-container svg .node) {
         cursor: pointer;
     }
+
+
 
     :global(body) {
         margin: 0;

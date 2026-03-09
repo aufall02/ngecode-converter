@@ -168,6 +168,7 @@ class AcornAdapter implements IParserAdapter {
         language: languageId,
         adapterId: this.id,
         error: null,
+        executableCode: sourceCode,
       };
     } catch (err: unknown) {
       const e = err as {
